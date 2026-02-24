@@ -1,0 +1,26 @@
+[project]
+name = "ga-mssr"
+version = "0.1.0"
+description = "GA-MSSR NQ Futures Trading System"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "PyWavelets>=1.4",
+    "matplotlib>=3.7",
+]
+
+[project.optional-dependencies]
+nautilus = ["nautilus_trader>=1.200"]
+optimize = ["pygad>=3.0"]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

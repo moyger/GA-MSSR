@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Data files (large CSVs, parquets)
+data/futures/*.csv
+data/futures/*.parquet
+
+# Keep fixture data for tests
+!tests/fixtures/
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+logs/
+
+# Ignore vscode AI rules
+.github/instructions/codacy.instructions.md
