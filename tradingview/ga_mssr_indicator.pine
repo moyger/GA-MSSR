@@ -1,0 +1,291 @@
+// This Pine Script(tm) v6 indicator is subject to the terms of use at:
+// https://www.tradingview.com/pine-script-docs/
+// GA-MSSR Signal Engine — 16-rule weighted composite indicator
+// Replicates the live bot's signal pipeline for visual confirmation.
+
+//@version=6
+indicator("GA-MSSR Signal", overlay=true, max_labels_count=500)
+
+// ============================================================
+// GA Weights (from model_state.json — update after retrain)
+// ============================================================
+grp_w = "GA Weights"
+w1  = input.float(-0.078, "W1  MA×MA",        group=grp_w, step=0.001)
+w2  = input.float( 0.424, "W2  EMA×MA",       group=grp_w, step=0.001)
+w3  = input.float(-0.318, "W3  EMA×EMA",      group=grp_w, step=0.001)
+w4  = input.float( 0.063, "W4  DEMA×MA",      group=grp_w, step=0.001)
+w5  = input.float( 0.083, "W5  DEMA×DEMA",    group=grp_w, step=0.001)
+w6  = input.float(-0.422, "W6  TEMA×MA",      group=grp_w, step=0.001)
+w7  = input.float( 0.250, "W7  Stoch×StochMA",group=grp_w, step=0.001)
+w8  = input.float( 0.117, "W8  Vortex",       group=grp_w, step=0.001)
+w9  = input.float(-0.157, "W9  Ichimoku",     group=grp_w, step=0.001)
+w10 = input.float( 0.222, "W10 RSI×Thresh",   group=grp_w, step=0.001)
+w11 = input.float( 0.380, "W11 CCI×Thresh",   group=grp_w, step=0.001)
+w12 = input.float(-0.505, "W12 RSI Bands",    group=grp_w, step=0.001)
+w13 = input.float(-0.290, "W13 CCI Bands",    group=grp_w, step=0.001)
+w14 = input.float( 0.017, "W14 Keltner",      group=grp_w, step=0.001)
+w15 = input.float(-0.527, "W15 Donchian",     group=grp_w, step=0.001)
+w16 = input.float(-0.283, "W16 Bollinger",    group=grp_w, step=0.001)
+
+// ============================================================
+// Rule Parameters (from model_state.json — update after retrain)
+// ============================================================
+grp_p = "Rule Parameters"
+// Rules 1-6: crossover periods (fast, slow)
+r1_p1  = input.int(3,  "R1  MA fast",    group=grp_p, minval=1)
+r1_p2  = input.int(7,  "R1  MA slow",    group=grp_p, minval=1)
+r2_p1  = input.int(3,  "R2  EMA",        group=grp_p, minval=1)
+r2_p2  = input.int(7,  "R2  MA",         group=grp_p, minval=1)
+r3_p1  = input.int(3,  "R3  EMA fast",   group=grp_p, minval=1)
+r3_p2  = input.int(7,  "R3  EMA slow",   group=grp_p, minval=1)
+r4_p1  = input.int(3,  "R4  DEMA",       group=grp_p, minval=1)
+r4_p2  = input.int(3,  "R4  MA",         group=grp_p, minval=1)
+r5_p1  = input.int(3,  "R5  DEMA fast",  group=grp_p, minval=1)
+r5_p2  = input.int(7,  "R5  DEMA slow",  group=grp_p, minval=1)
+r6_p1  = input.int(3,  "R6  TEMA",       group=grp_p, minval=1)
+r6_p2  = input.int(3,  "R6  MA",         group=grp_p, minval=1)
+// Rule 7: stochastic
+r7_p1  = input.int(27, "R7  Stoch K",    group=grp_p, minval=1)
+r7_p2  = input.int(27, "R7  Stoch MA",   group=grp_p, minval=1)
+// Rule 8: vortex
+r8_p1  = input.int(3,  "R8  Vortex+",    group=grp_p, minval=1)
+r8_p2  = input.int(7,  "R8  Vortex-",    group=grp_p, minval=1)
+// Rule 9: ichimoku
+r9_p1  = input.int(3,  "R9  Ichi n1",    group=grp_p, minval=1)
+r9_p2  = input.int(7,  "R9  Ichi n3",    group=grp_p, minval=1)
+// Rule 10-11: threshold rules
+r10_p1 = input.int(3,  "R10 RSI period",  group=grp_p, minval=1)
+r10_p2 = input.int(50, "R10 RSI thresh",  group=grp_p)
+r11_p1 = input.int(3,  "R11 CCI period",  group=grp_p, minval=1)
+r11_p2 = input.int(20, "R11 CCI thresh",  group=grp_p)
+// Rule 12-13: band rules
+r12_p1 = input.int(3,  "R12 RSI period",  group=grp_p, minval=1)
+r12_hl = input.int(60, "R12 RSI upper",   group=grp_p)
+r12_ll = input.int(50, "R12 RSI lower",   group=grp_p)
+r13_p1 = input.int(3,  "R13 CCI period",  group=grp_p, minval=1)
+r13_hl = input.int(20, "R13 CCI upper",   group=grp_p)
+r13_ll = input.int(-20, "R13 CCI lower",  group=grp_p)
+// Rule 14-16: channel rules
+r14_p  = input.int(15, "R14 Keltner",     group=grp_p, minval=1)
+r15_p  = input.int(3,  "R15 Donchian",    group=grp_p, minval=1)
+r16_p  = input.int(15, "R16 Bollinger",   group=grp_p, minval=1)
+
+// ============================================================
+// Display settings
+// ============================================================
+grp_d = "Display"
+show_bar_color = input.bool(true, "Color bars by position", group=grp_d)
+show_labels    = input.bool(true, "Show BUY/SELL labels",   group=grp_d)
+show_bg        = input.bool(true, "Show background color",  group=grp_d)
+
+// ============================================================
+// Helper: EMA-based RSI (matches Python's ewm(span=n))
+// Pine's ta.rsi uses Wilder/RMA smoothing — we need EMA-based.
+// ============================================================
+ema_rsi(src, n) =>
+    diff = src - src[1]
+    up = math.max(diff, 0.0)
+    dn = math.max(-diff, 0.0)
+    ema_up = ta.ema(up, n)
+    ema_dn = ta.ema(dn, n)
+    100.0 * ema_up / (ema_up + ema_dn)
+
+// ============================================================
+// Helper: DEMA
+// ============================================================
+dema(src, n) =>
+    e = ta.ema(src, n)
+    2.0 * e - ta.ema(e, n)
+
+// ============================================================
+// Helper: TEMA
+// ============================================================
+tema(src, n) =>
+    e = ta.ema(src, n)
+    ee = ta.ema(e, n)
+    3.0 * e - 3.0 * ee + ta.ema(ee, n)
+
+// ============================================================
+// Rule 1: MA × MA crossover
+// signal = +1 if fast < slow, else -1 (shifted by 1 bar)
+// ============================================================
+r1_s1 = ta.sma(close, r1_p1)
+r1_s2 = ta.sma(close, r1_p2)
+sig1  = r1_s1[1] < r1_s2[1] ? 1.0 : -1.0
+
+// ============================================================
+// Rule 2: EMA × MA crossover
+// ============================================================
+r2_s1 = ta.ema(close, r2_p1)
+r2_s2 = ta.sma(close, r2_p2)
+sig2  = r2_s1[1] < r2_s2[1] ? 1.0 : -1.0
+
+// ============================================================
+// Rule 3: EMA × EMA crossover
+// ============================================================
+r3_s1 = ta.ema(close, r3_p1)
+r3_s2 = ta.ema(close, r3_p2)
+sig3  = r3_s1[1] < r3_s2[1] ? 1.0 : -1.0
+
+// ============================================================
+// Rule 4: DEMA × MA crossover
+// ============================================================
+r4_s1 = dema(close, r4_p1)
+r4_s2 = ta.sma(close, r4_p2)
+sig4  = r4_s1[1] < r4_s2[1] ? 1.0 : -1.0
+
+// ============================================================
+// Rule 5: DEMA × DEMA crossover
+// ============================================================
+r5_s1 = dema(close, r5_p1)
+r5_s2 = dema(close, r5_p2)
+sig5  = r5_s1[1] < r5_s2[1] ? 1.0 : -1.0
+
+// ============================================================
+// Rule 6: TEMA × MA crossover
+// ============================================================
+r6_s1 = tema(close, r6_p1)
+r6_s2 = ta.sma(close, r6_p2)
+sig6  = r6_s1[1] < r6_s2[1] ? 1.0 : -1.0
+
+// ============================================================
+// Rule 7: Stochastic %K × Stochastic MA
+// ============================================================
+r7_smin = ta.lowest(low, r7_p1)
+r7_smax = ta.highest(high, r7_p1)
+r7_k    = 100.0 * (close - r7_smin) / (r7_smax - r7_smin)
+r7_ma   = ta.sma(r7_k, r7_p2)
+sig7    = r7_k[1] < r7_ma[1] ? 1.0 : -1.0
+
+// ============================================================
+// Rule 8: Vortex VI+ × VI-
+// ============================================================
+r8_tr  = math.max(high, close[1]) - math.min(low, close[1])
+r8_trn_pos = math.sum(r8_tr, r8_p1)
+r8_vmp = math.abs(high - low[1])
+r8_vip = math.sum(r8_vmp, r8_p1) / r8_trn_pos
+
+r8_trn_neg = math.sum(r8_tr, r8_p2)
+r8_vmm = math.abs(low - high[1])
+r8_vin = math.sum(r8_vmm, r8_p2) / r8_trn_neg
+
+sig8 = r8_vip[1] < r8_vin[1] ? 1.0 : -1.0
+
+// ============================================================
+// Rule 9: Ichimoku (price vs Span A & Span B)
+// n1=r9_p1, n2=round((p1+p2)/2), n3=r9_p2
+// ============================================================
+r9_n2   = math.round((r9_p1 + r9_p2) / 2)
+// Span A = 0.5 * (conversion + base)
+r9_conv = 0.5 * (ta.highest(high, r9_p1) + ta.lowest(low, r9_p1))
+r9_base = 0.5 * (ta.highest(high, r9_n2) + ta.lowest(low, r9_n2))
+r9_sa   = 0.5 * (r9_conv + r9_base)
+// Span B = 0.5 * (highest(n3) + lowest(n3))
+r9_sb   = 0.5 * (ta.highest(high, r9_p2) + ta.lowest(low, r9_p2))
+// Signal: -1 if price above both, +1 if below both, 0 otherwise
+sig9_raw = close[1] > r9_sa[1] and close[1] > r9_sb[1] ? -1.0 :
+           close[1] < r9_sa[1] and close[1] < r9_sb[1] ?  1.0 : 0.0
+sig9 = sig9_raw
+
+// ============================================================
+// Rule 10: RSI vs threshold (EMA-based RSI)
+// ============================================================
+r10_rsi = ema_rsi(close, r10_p1)
+sig10   = r10_rsi[1] < r10_p2 ? 1.0 : -1.0
+
+// ============================================================
+// Rule 11: CCI vs threshold
+// Python CCI uses hlc3 + stdev (not mean dev like ta.cci)
+// ============================================================
+r11_pp  = (high + low + close) / 3.0
+r11_cci = (r11_pp - ta.sma(r11_pp, r11_p1)) / (0.015 * ta.stdev(r11_pp, r11_p1))
+sig11   = r11_cci[1] < r11_p2 ? 1.0 : -1.0
+
+// ============================================================
+// Rule 12: RSI with upper/lower bands
+// ============================================================
+r12_rsi = ema_rsi(close, r12_p1)
+sig12   = r12_rsi[1] > r12_hl ? -1.0 : r12_rsi[1] < r12_ll ? 1.0 : 0.0
+
+// ============================================================
+// Rule 13: CCI with upper/lower bands
+// Python CCI uses hlc3 + stdev (not mean dev like ta.cci)
+// ============================================================
+r13_pp  = (high + low + close) / 3.0
+r13_cci = (r13_pp - ta.sma(r13_pp, r13_p1)) / (0.015 * ta.stdev(r13_pp, r13_p1))
+sig13   = r13_cci[1] > r13_hl ? -1.0 : r13_cci[1] < r13_ll ? 1.0 : 0.0
+
+// ============================================================
+// Rule 14: Keltner Channel mean-reversion
+// Upper: SMA((4H - 2L + C)/3, n)  Lower: SMA((-2H + 4L + C)/3, n)
+// ============================================================
+r14_tp_h = (4.0 * high - 2.0 * low + close) / 3.0
+r14_tp_l = (-2.0 * high + 4.0 * low + close) / 3.0
+r14_ub   = ta.sma(r14_tp_h, r14_p)
+r14_lb   = ta.sma(r14_tp_l, r14_p)
+sig14    = close[1] > r14_ub[1] ? -1.0 : close[1] < r14_lb[1] ? 1.0 : 0.0
+
+// ============================================================
+// Rule 15: Donchian Channel mean-reversion
+// ============================================================
+r15_ub = ta.highest(close, r15_p)
+r15_lb = ta.lowest(close, r15_p)
+sig15  = close[1] > r15_ub[1] ? -1.0 : close[1] < r15_lb[1] ? 1.0 : 0.0
+
+// ============================================================
+// Rule 16: Bollinger Band mean-reversion (ndev=2)
+// ============================================================
+r16_mid = ta.sma(close, r16_p)
+r16_std = ta.stdev(close, r16_p)
+r16_ub  = r16_mid + 2.0 * r16_std
+r16_lb  = r16_mid - 2.0 * r16_std
+sig16   = close[1] > r16_ub[1] ? -1.0 : close[1] < r16_lb[1] ? 1.0 : 0.0
+
+// ============================================================
+// Weighted composite signal
+// ============================================================
+raw_signal = w1*sig1 + w2*sig2 + w3*sig3 + w4*sig4 + w5*sig5 + w6*sig6 +
+             w7*sig7 + w8*sig8 + w9*sig9 + w10*sig10 + w11*sig11 + w12*sig12 +
+             w13*sig13 + w14*sig14 + w15*sig15 + w16*sig16
+
+// Discretize to position: +1, 0, -1
+position = raw_signal > 0 ? 1 : raw_signal < 0 ? -1 : 0
+
+// Detect position changes
+pos_changed = position != position[1]
+
+// ============================================================
+// Visuals: background color
+// ============================================================
+bg_long  = color.new(color.green, 85)
+bg_short = color.new(color.red, 85)
+bg_flat  = color.new(color.gray, 95)
+bgcolor(show_bg ? (position == 1 ? bg_long : position == -1 ? bg_short : bg_flat) : na)
+
+// ============================================================
+// Visuals: bar coloring
+// ============================================================
+bar_long  = color.new(#26a69a, 0)
+bar_short = color.new(#ef5350, 0)
+bar_flat  = color.new(#787b86, 0)
+barcolor(show_bar_color ? (position == 1 ? bar_long : position == -1 ? bar_short : bar_flat) : na)
+
+// ============================================================
+// Visuals: BUY/SELL labels on position changes
+// ============================================================
+if show_labels and pos_changed
+    if position == 1
+        label.new(bar_index, low, "LONG", style=label.style_label_up,
+                  color=color.green, textcolor=color.white, size=size.small)
+    else if position == -1
+        label.new(bar_index, high, "SHORT", style=label.style_label_down,
+                  color=color.red, textcolor=color.white, size=size.small)
+    else
+        label.new(bar_index, low, "FLAT", style=label.style_label_up,
+                  color=color.gray, textcolor=color.white, size=size.small)
+
+// ============================================================
+// Plot raw signal and position in a data window
+// ============================================================
+plot(raw_signal, "Raw Signal", color=color.blue, display=display.data_window)
+plot(position, "Position", color=color.orange, display=display.data_window)

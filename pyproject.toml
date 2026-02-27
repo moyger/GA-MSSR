@@ -1,0 +1,42 @@
+[project]
+name = "ga-mssr"
+version = "0.1.0"
+description = "GA-MSSR NQ Futures Trading System"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "PyWavelets>=1.4",
+    "matplotlib>=3.7",
+]
+
+[project.optional-dependencies]
+nautilus = ["nautilus_trader>=1.200"]
+ibkr = [
+    "nautilus_trader>=1.200",
+    "nautilus-ibapi>=10.30",
+    "protobuf>=4.0",
+    "python-dotenv>=1.0",
+]
+optimize = ["pygad>=3.0"]
+live = [
+    "ccxt>=4.0",
+    "APScheduler>=3.10,<4.0",
+    "python-dotenv>=1.0",
+    "requests>=2.28",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "rich>=13.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["data*", "live*", "live_futures*", "live_forex*", "optimizers*", "strategies*", "monitoring*"]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

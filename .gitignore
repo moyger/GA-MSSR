@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Data files (large CSVs, parquets)
+data/futures/*.csv
+data/futures/*.parquet
+
+# Keep fixture data for tests
+!tests/fixtures/
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+logs/
+
+# Live trading secrets & state
+.env
+.env.forex
+.env.futures
+.env.propfirm.*
+!.env.propfirm.example
+live/state/
+live_forex/state/
+live_futures/state/
+
+# Heartbeat state (runtime artifact)
+**/heartbeat.json
+
+# Ignore vscode AI rules
+.github/instructions/codacy.instructions.md
