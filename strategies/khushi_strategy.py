@@ -61,7 +61,10 @@ class KhushiSignalEngine:
         denoise: bool = True,
         wavelet: str = "db4",
         er_period: int = 14,
-        er_threshold: float = 0.40,
+        er_threshold: float = 0.0,
+        er_enter_threshold: float = 0.0,
+        er_exit_threshold: float = 0.0,
+        min_hold_bars: int = 0,
     ):
         self._weights = np.array(ga_weights, dtype=np.float64)
         # Convert rule_params: lists back to tuples for rules, single-element lists to scalars
@@ -79,8 +82,16 @@ class KhushiSignalEngine:
         self._wavelet_filter = WaveletFilter(wavelet=wavelet) if denoise else None
         self._er_period = er_period
         self._er_threshold = er_threshold
+        self._er_enter_threshold = er_enter_threshold
+        self._er_exit_threshold = er_exit_threshold
+        self._min_hold_bars = min_hold_bars
         self._buffer: deque[dict] = deque(maxlen=warmup_bars)
         self._bar_count = 0
+
+        # Hysteresis state
+        self._er_trend_active = False
+        self._last_position = 0
+        self._bars_since_change = 0
 
     def push_bar(
         self,
@@ -136,19 +147,57 @@ class KhushiSignalEngine:
         # Weighted combination
         raw_position = float(self._weights @ last_signals)
 
-        # ER trend filter: skip choppy markets
-        if self._er_threshold > 0:
+        # ER trend filter with hysteresis
+        if self._er_enter_threshold > 0:
+            er = efficiency_ratio(df["close"], n=self._er_period)
+            if len(er.dropna()) > 0:
+                current_er = float(er.iloc[-1])
+                if not self._er_trend_active:
+                    if current_er >= self._er_enter_threshold:
+                        self._er_trend_active = True
+                    else:
+                        self._bars_since_change += 1
+                        self._last_position = 0
+                        return 0  # Not trending yet
+                else:
+                    if current_er < self._er_exit_threshold:
+                        self._er_trend_active = False
+                        self._bars_since_change += 1
+                        self._last_position = 0
+                        return 0  # Trend ended
+        elif self._er_threshold > 0:
+            # Legacy simple threshold (backward compatible)
             er = efficiency_ratio(df["close"], n=self._er_period)
             if len(er.dropna()) > 0 and er.iloc[-1] < self._er_threshold:
+                self._bars_since_change += 1
+                self._last_position = 0
                 return 0  # Market is choppy, stay flat
 
         # Discretize with threshold
         if raw_position > threshold:
-            return 1
+            new_position = 1
         elif raw_position < -threshold:
-            return -1
+            new_position = -1
         else:
-            return 0
+            new_position = 0
+
+        # Minimum hold time: prevent rapid flipping
+        if (
+            self._min_hold_bars > 0
+            and self._bars_since_change < self._min_hold_bars
+            and self._last_position != 0
+            and new_position != self._last_position
+        ):
+            new_position = self._last_position
+
+        # Update state
+        if new_position != self._last_position:
+            self._bars_since_change = 0
+        else:
+            self._bars_since_change += 1
+        self._last_position = new_position
+
+        return new_position
 
     @property
     def bar_count(self) -> int:

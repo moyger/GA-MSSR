@@ -195,6 +195,9 @@ class LiveFuturesBot:
             wavelet=self._config.wavelet,
             er_period=self._config.er_period,
             er_threshold=self._config.er_threshold,
+            er_enter_threshold=self._config.er_enter_threshold,
+            er_exit_threshold=self._config.er_exit_threshold,
+            min_hold_bars=self._config.min_hold_bars,
         )
 
     def _warmup(self) -> None:

@@ -40,7 +40,10 @@ class LiveConfig:
 
     # --- ER Filter ---
     er_period: int = 14
-    er_threshold: float = 0.40
+    er_threshold: float = 0.0             # Legacy simple threshold (0 = disabled)
+    er_enter_threshold: float = 0.50      # Hysteresis: ER must exceed to enter
+    er_exit_threshold: float = 0.30       # Hysteresis: ER must drop below to exit
+    min_hold_bars: int = 3                # Minimum bars before allowing position flip
 
     # --- Position Sizing ---
     trade_size: float = 0.01

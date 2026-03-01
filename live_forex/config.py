@@ -36,7 +36,10 @@ class LiveForexConfig:
 
     # --- ER Filter ---
     er_period: int = 20
-    er_threshold: float = 0.35
+    er_threshold: float = 0.0             # Legacy simple threshold (0 = disabled)
+    er_enter_threshold: float = 0.45      # Hysteresis: ER must exceed to enter
+    er_exit_threshold: float = 0.25       # Hysteresis: ER must drop below to exit
+    min_hold_bars: int = 3                # Minimum bars before allowing position flip
 
     # --- Training ---
     train_days: int = 20
